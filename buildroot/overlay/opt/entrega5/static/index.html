@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DE10-Standard - Entrega 5</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f2f4f7; margin: 0; color: #1d2433; }
+  header { background: #c8102e; color: #fff; padding: 16px 24px; }
+  header h1 { margin: 0; font-size: 1.3rem; }
+  main { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); padding: 24px; max-width: 1000px; margin: auto; }
+  .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+  .led { width: 64px; height: 64px; border-radius: 50%; background: #444; margin: 8px auto 16px; transition: .15s; }
+  .led.on { background: #3cff5a; box-shadow: 0 0 24px #3cff5a; }
+  .btn-state { font-size: 1.6rem; font-weight: 600; text-align: center; padding: 18px; border-radius: 8px; background: #e4e7ec; }
+  .btn-state.pressed { background: #ffd23f; }
+  .row { display: flex; gap: 8px; justify-content: center; }
+  button { font-size: 1rem; padding: 8px 16px; border: 0; border-radius: 6px; background: #1d2433; color: #fff; cursor: pointer; }
+  button:hover { opacity: .85; }
+  .axis { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .axis span:first-child { width: 16px; font-weight: 600; }
+  .bar { flex: 1; height: 12px; background: #e4e7ec; border-radius: 6px; position: relative; overflow: hidden; }
+  .bar div { position: absolute; top: 0; bottom: 0; background: #c8102e; }
+  .axis code { width: 80px; text-align: right; }
+  #cam { width: 100%; border-radius: 6px; background: #000; min-height: 120px; }
+  #err { color: #c8102e; text-align: center; padding: 0 24px; min-height: 1.2em; }
+  .muted { color: #667085; font-size: .9rem; text-align: center; }
+</style>
+</head>
+<body>
+<header><h1>DE10-Standard &middot; HPS Web Control (Entrega 5)</h1></header>
+<p id="err"></p>
+<main>
+  <section class="card">
+    <h2>LED (HPS_LED)</h2>
+    <div id="led" class="led"></div>
+    <div class="row">
+      <button onclick="setLed('on')">Ligar</button>
+      <button onclick="setLed('off')">Desligar</button>
+      <button onclick="setLed('toggle')">Toggle</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Botão (HPS_KEY)</h2>
+    <div id="btn" class="btn-state">--</div>
+    <p class="muted">Atualiza a cada 200 ms</p>
+  </section>
+  <section class="card">
+    <h2>IMU (ADXL345)</h2>
+    <div id="imu"></div>
+    <p id="imu-na" class="muted" hidden>IMU indisponível</p>
+  </section>
+  <section class="card">
+    <h2>Webcam</h2>
+    <img id="cam" alt="webcam" hidden>
+    <p id="cam-msg" class="muted"></p>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const axes = ['x', 'y', 'z'];
+$('imu').innerHTML = axes.map(a =>
+  `<div class="axis"><span>${a.toUpperCase()}</span><div class="bar"><div id="bar-${a}"></div></div><code id="val-${a}">--</code></div>`
+).join('');
+
+function render(s) {
+  $('err').textContent = '';
+  $('led').classList.toggle('on', s.led === 1);
+  $('btn').classList.toggle('pressed', s.button === 1);
+  $('btn').textContent = s.button ? 'PRESSIONADO' : 'SOLTO';
+  $('imu-na').hidden = !!s.imu;
+  $('imu').hidden = !s.imu;
+  if (s.imu) for (const a of axes) {
+    const mg = s.imu[a], pct = Math.min(Math.abs(mg) / 2000, 1) * 50;
+    const bar = $('bar-' + a);
+    bar.style.left = (mg < 0 ? 50 - pct : 50) + '%';
+    bar.style.width = pct + '%';
+    $('val-' + a).textContent = mg + ' mg';
+  }
+}
+
+async function poll() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    if (!r.ok) throw new Error(s.error);
+    render(s);
+  } catch (e) { $('err').textContent = 'Erro: ' + e.message; }
+  setTimeout(poll, 200);
+}
+
+async function setLed(state) {
+  try {
+    const r = await fetch('/api/led', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
+    const s = await r.json();
+    if (!r.ok) throw new Error(s.error);
+    render(s);
+  } catch (e) { $('err').textContent = 'Erro: ' + e.message; }
+}
+
+function refreshCam() {
+  const img = new Image();
+  img.onload = () => { $("cam").hidden = false; $("cam").src = img.src; $('cam-msg').textContent = ''; setTimeout(refreshCam, 500); };
+  img.onerror = () => { $("cam").hidden = true; $('cam-msg').textContent = 'Webcam indisponível (conecte uma câmera USB UVC)'; setTimeout(refreshCam, 3000); };
+  img.src = '/camera.jpg?t=' + Date.now();
+}
+
+poll();
+refreshCam();
+</script>
+</body>
+</html>

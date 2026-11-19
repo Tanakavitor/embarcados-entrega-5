@@ -1,0 +1,44 @@
+#!/bin/sh
+# Starts the hwctl hardware daemon and the Entrega 5 web server at boot.
+HWCTL=/usr/bin/hwctl
+SERVER=/opt/entrega5/server.py
+HWCTL_PID=/var/run/hwctl.pid
+SERVER_PID=/var/run/entrega5-web.pid
+
+start() {
+        printf "Starting hwctl: "
+        start-stop-daemon -S -b -m -p $HWCTL_PID -x $HWCTL -- && echo "OK" || echo "FAIL"
+        # wait for the UNIX socket
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+            [ -S /tmp/entrega5.socket ] && break
+            usleep 200000
+        done
+        printf "Starting web server: "
+        start-stop-daemon -S -b -m -p $SERVER_PID -x /usr/bin/python3 -- $SERVER && echo "OK" || echo "FAIL"
+}
+
+stop() {
+        printf "Stopping web server: "
+        start-stop-daemon -K -q -p $SERVER_PID && echo "OK" || echo "FAIL"
+        printf "Stopping hwctl: "
+        start-stop-daemon -K -q -p $HWCTL_PID && echo "OK" || echo "FAIL"
+        rm -f $SERVER_PID $HWCTL_PID
+}
+
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  restart|reload)
+        stop
+        sleep 1
+        start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+exit 0

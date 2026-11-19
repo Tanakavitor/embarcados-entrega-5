@@ -1,0 +1,28 @@
+#!/bin/sh
+# Brings eth0 up: tries DHCP first (router scenario), falls back to the
+# static link-local IP used in class (direct PC/NIC scenario).
+STATIC_IP=169.254.0.13
+NETMASK=255.255.0.0
+
+case "$1" in
+  start)
+        printf "Configuring eth0: "
+        ifconfig eth0 up
+        if udhcpc -i eth0 -n -q -t 5 >/dev/null 2>&1; then
+            echo "DHCP OK"
+        else
+            ifconfig eth0 $STATIC_IP netmask $NETMASK up && echo "static $STATIC_IP" || echo "FAIL"
+        fi
+        ;;
+  stop)
+        ifconfig eth0 down
+        ;;
+  restart|reload)
+        "$0" stop
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+exit 0
